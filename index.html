@@ -1,636 +1,529 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-50">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Receipt & Invoice Extractor</title>
-  <!-- Tailwind CSS via CDN -->
+
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- Firebase Web SDKs (v9 Compat for easy single-file integration) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+
   <style>
-    .drag-over {
-      border-color: #4f46e5 !important;
-      background-color: #eef2ff !important;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .dropzone-active { border-color: #3b82f6 !important; background-color: #eff6ff !important; }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
+<body class="h-full text-slate-800 flex flex-col min-h-screen">
 
-  <!-- Header -->
+  <!-- Navigation Header -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center space-x-3">
-        <div class="p-2 bg-indigo-600 rounded-lg text-white shadow-sm">
-          <i data-lucide="receipt" class="w-6 h-6"></i>
+        <div class="bg-blue-600 text-white p-2.5 rounded-xl shadow-md">
+          <i class="fa-solid me-0 fa-receipt text-xl"></i>
         </div>
         <div>
-          <h1 class="text-lg font-bold text-slate-900 leading-tight">Receipt & Invoice Extractor</h1>
-          <div id="cloudStatusBadge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-            <i data-lucide="hard-drive" class="w-3 h-3"></i> Local Mode
-          </div>
+          <h1 class="font-bold text-slate-900 text-lg leading-tight">Receipt Parser AI</h1>
+          <p class="text-xs text-slate-500 hidden sm:block">Smart Invoice Extraction & Cross-Device Sync</p>
         </div>
       </div>
 
-      <div class="flex items-center space-x-2">
-        <button id="apiKeySettingsBtn" class="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-indigo-300 rounded-lg text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition shadow-sm">
-          <i data-lucide="key" class="w-4 h-4 text-indigo-600"></i>
-          <span class="hidden sm:inline">Gemini Key</span>
+      <!-- Header Action Buttons -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Storage Status Indicator -->
+        <span id="storageBadge" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 animate-pulse"></span>
+          Checking storage...
+        </span>
+
+        <!-- Settings Buttons -->
+        <button id="btnOpenGeminiModal" class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors flex items-center space-x-1.5">
+          <i class="fa-solid fa-key text-blue-500"></i>
+          <span class="hidden md:inline">Gemini Key</span>
         </button>
-        <button id="firebaseConfigBtn" class="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-amber-300 rounded-lg text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 transition shadow-sm">
-          <i data-lucide="database" class="w-4 h-4 text-amber-600"></i>
-          <span class="hidden sm:inline">Firebase Sync</span>
+
+        <button id="btnOpenFirebaseModal" class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors flex items-center space-x-1.5">
+          <i class="fa-solid fa-cloud text-amber-500"></i>
+          <span class="hidden md:inline">Firebase Sync</span>
         </button>
-        <button id="sheetsConfigBtn" class="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-emerald-300 rounded-lg text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition shadow-sm">
-          <i data-lucide="sheet" class="w-4 h-4 text-emerald-600"></i>
-          <span class="hidden sm:inline">Google Sheets</span>
-        </button>
-        <button id="copyAllBtn" class="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition shadow-sm">
-          <i data-lucide="copy" class="w-4 h-4"></i>
-          <span>Copy Table</span>
-        </button>
-        <button id="exportCsvBtn" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 rounded-lg text-sm font-medium text-white hover:bg-indigo-700 transition shadow-sm">
-          <i data-lucide="download" class="w-4 h-4"></i>
-          <span>Export CSV</span>
+
+        <button id="btnOpenSheetsModal" class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors flex items-center space-x-1.5">
+          <i class="fa-solid fa-table text-emerald-600"></i>
+          <span class="hidden md:inline">Sheets Sync</span>
         </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Container -->
-  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+  <!-- Main Content Layout -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <!-- Upload & Queue Area -->
-    <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      
-      <!-- Upload Box -->
-      <div class="md:col-span-2 bg-white rounded-xl border-2 border-dashed border-slate-300 p-6 flex flex-col justify-center items-center text-center cursor-pointer hover:border-indigo-400 transition-colors relative" id="dropZone">
-        <input type="file" id="fileInput" accept="image/*" multiple class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
-        
-        <div class="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 mb-3">
-          <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+    <!-- Dropzone & File Upload Section -->
+    <div id="dropzone" class="border-2 border-dashed border-slate-300 hover:border-blue-400 bg-white rounded-2xl p-6 sm:p-8 text-center transition-all cursor-pointer shadow-sm relative overflow-hidden group">
+      <input type="file" id="fileInput" multiple accept="image/*" class="hidden" />
+      <input type="file" id="cameraInput" capture="environment" accept="image/*" class="hidden" />
+
+      <div class="flex flex-col items-center justify-center space-y-3">
+        <div class="w-14 h-14 bg-blue-50 group-hover:bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center transition-colors shadow-inner">
+          <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
         </div>
-        <h3 class="text-base font-semibold text-slate-800">Upload Receipts, Bills, or Invoices</h3>
-        <p class="text-sm text-slate-500 mt-1">Drag and drop image files here, or click to browse</p>
-        <span class="inline-flex items-center mt-3 text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
-          <i data-lucide="shield-check" class="w-3.5 h-3.5 mr-1"></i> Data automatically preserved in local storage
-        </span>
-      </div>
-
-      <!-- Quick Summary Cards -->
-      <div class="bg-white rounded-xl border border-slate-200 p-5 flex flex-col justify-between shadow-sm">
         <div>
-          <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Summary Statistics</h3>
-          
-          <div class="space-y-4">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-              <span class="text-sm text-slate-600 flex items-center gap-2">
-                <i data-lucide="file-text" class="w-4 h-4 text-slate-400"></i> Total Saved Receipts
-              </span>
-              <span id="statCount" class="font-bold text-slate-900 text-lg">0</span>
-            </div>
-
-            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-              <span class="text-sm text-slate-600 flex items-center gap-2">
-                <i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-500"></i> Total Amount
-              </span>
-              <span id="statTotal" class="font-bold text-emerald-600 text-lg">$0.00</span>
-            </div>
-
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-slate-600 flex items-center gap-2">
-                <i data-lucide="cloud" class="w-4 h-4 text-slate-400"></i> Status
-              </span>
-              <span id="statStatus" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Idle</span>
-            </div>
-          </div>
+          <p class="text-base font-semibold text-slate-800">
+            Drop receipts or invoices here
+          </p>
+          <p class="text-xs text-slate-500 mt-1">
+            Supports PNG, JPG, WEBP • Auto-extracted by Gemini 2.0 Flash AI
+          </p>
         </div>
-
-        <div class="mt-4 pt-3 border-t border-slate-100 flex gap-2">
-          <button id="clearAllBtn" class="w-full py-1.5 text-xs text-red-600 font-medium hover:bg-red-50 rounded border border-red-200 transition">
-            Clear All Saved Data
+        <div class="flex flex-wrap gap-2 justify-center pt-2">
+          <button type="button" onclick="document.getElementById('fileInput').click()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors flex items-center space-x-1.5">
+            <i class="fa-regular fa-folder-open"></i>
+            <span>Browse Files</span>
           </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Processing Banner -->
-    <div id="processingBanner" class="hidden bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-center space-x-4">
-      <div class="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent"></div>
-      <div class="flex-grow">
-        <h4 class="text-sm font-medium text-indigo-900" id="processingMsg">Analyzing receipt with Gemini Vision AI...</h4>
-        <div class="w-full bg-indigo-200 h-1.5 rounded-full mt-2 overflow-hidden">
-          <div id="progressBar" class="bg-indigo-600 h-full w-0 transition-all duration-300"></div>
+          <button type="button" onclick="document.getElementById('cameraInput').click()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors flex items-center space-x-1.5 sm:hidden">
+            <i class="fa-solid fa-camera"></i>
+            <span>Snap Photo</span>
+          </button>
+          <button type="button" id="btnAddManualRow" class="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl shadow-sm transition-colors flex items-center space-x-1.5">
+            <i class="fa-solid fa-plus text-slate-500"></i>
+            <span>Manual Row</span>
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Alert / Toast Container -->
-    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
-
-    <!-- Main Data Table Section -->
-    <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-      <div class="px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 class="text-base font-bold text-slate-900">Extracted Receipts & Invoices</h2>
-          <p class="text-xs text-slate-500">Drag headers to reorder columns. Click headers to sort. Edits save automatically.</p>
+    <!-- Processing Indicator Banner -->
+    <div id="processingBanner" class="hidden bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <i class="fa-solid fa-spinner fa-spin text-blue-600 text-lg"></i>
+          <span id="processingMsg" class="text-xs font-semibold text-blue-900">Analyzing receipt image...</span>
         </div>
-        
-        <div class="flex items-center gap-2">
-          <div class="relative">
-            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-            <input type="text" id="searchInput" placeholder="Search entries..." class="pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48">
-          </div>
-          <button id="addRowBtn" class="inline-flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-            <span>Add Row</span>
-          </button>
+        <span class="text-xs font-bold text-blue-700" id="queueStatus">1 in queue</span>
+      </div>
+      <div class="w-full bg-blue-200 rounded-full h-1.5 overflow-hidden">
+        <div id="progressBar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Metrics Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-500">Total Expenses</span>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="metricTotalSpent" class="text-xl sm:text-2xl font-bold text-slate-900">$0.00</span>
+          <i class="fa-solid fa-wallet text-slate-300 text-lg"></i>
         </div>
       </div>
 
-      <!-- Scrollable Table Wrapper -->
-      <div class="overflow-x-auto min-h-[300px]">
-        <table class="w-full text-left border-collapse text-sm">
-          <thead id="receiptTableHeader" class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[11px] font-semibold tracking-wider select-none">
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-500">Total Receipts</span>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="metricCount" class="text-xl sm:text-2xl font-bold text-slate-900">0</span>
+          <i class="fa-solid fa-receipt text-slate-300 text-lg"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-500">Top Category</span>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="metricTopCat" class="text-base sm:text-lg font-bold text-slate-900 truncate">—</span>
+          <i class="fa-solid fa-tags text-slate-300 text-lg"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-500">Google Sheets Sync</span>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="metricSheetsStatus" class="text-xs font-bold text-slate-500">Not Configured</span>
+          <i class="fa-solid fa-file-excel text-emerald-500 text-lg"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters & Actions Header -->
+    <div class="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+      <div class="relative w-full sm:w-72">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        <input type="text" id="searchInput" placeholder="Search store, notes..." class="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" />
+      </div>
+
+      <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+        <select id="categoryFilter" class="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700">
+          <option value="ALL">All Categories</option>
+          <option value="Groceries">Groceries</option>
+          <option value="Dining">Dining</option>
+          <option value="Office">Office</option>
+          <option value="Utilities">Utilities</option>
+          <option value="Travel">Travel</option>
+          <option value="Healthcare">Healthcare</option>
+          <option value="General">General</option>
+        </select>
+
+        <button id="btnExportCsv" class="px-3 py-2 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 transition-colors flex items-center space-x-1">
+          <i class="fa-solid fa-file-csv text-slate-500"></i>
+          <span>CSV</span>
+        </button>
+
+        <button id="btnClearAll" class="px-3 py-2 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-600 rounded-xl border border-red-200 transition-colors flex items-center space-x-1">
+          <i class="fa-solid fa-trash-can"></i>
+          <span>Clear</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Table & Cards Layout -->
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <!-- Desktop Table View -->
+      <div class="overflow-x-auto hidden md:block">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <th class="py-3 px-4">Receipt</th>
+              <th class="py-3 px-4">Merchant / Store</th>
+              <th class="py-3 px-4">Date</th>
+              <th class="py-3 px-4">Category</th>
+              <th class="py-3 px-4">Amount</th>
+              <th class="py-3 px-4">Invoice #</th>
+              <th class="py-3 px-4">Summary</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
           </thead>
-          <tbody id="receiptTableBody" class="divide-y divide-slate-100 text-slate-700">
+          <tbody id="receiptsTableBody" class="divide-y divide-slate-100 text-xs">
+            <!-- Table Rows Injected Here -->
           </tbody>
         </table>
+      </div>
 
-        <!-- Empty State -->
-        <div id="emptyState" class="py-16 text-center flex flex-col items-center justify-center text-slate-400">
-          <i data-lucide="file-spreadsheet" class="w-12 h-12 stroke-1 mb-2"></i>
-          <p class="text-sm font-medium text-slate-600">No stored receipts found</p>
-          <p class="text-xs text-slate-400 mt-1">Upload an image of a bill, receipt or invoice to extract and save automatically.</p>
+      <!-- Mobile List Card View -->
+      <div id="receiptsCardsMobile" class="divide-y divide-slate-100 md:hidden">
+        <!-- Cards Injected Here -->
+      </div>
+
+      <!-- Empty State Indicator -->
+      <div id="emptyState" class="p-12 text-center flex flex-col items-center justify-center space-y-3">
+        <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
+          <i class="fa-solid fa-receipt text-3xl"></i>
         </div>
+        <p class="text-sm font-semibold text-slate-700">No receipts added yet</p>
+        <p class="text-xs text-slate-400 max-w-sm">
+          Upload receipt images above or enter records manually to start tracking expenses.
+        </p>
       </div>
-
-      <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center">
-        <span>Tip: Press <kbd class="px-1.5 py-0.5 bg-slate-200 rounded text-slate-700 font-mono">Tab</kbd> to jump between fields. Changes save instantly.</span>
-        <span id="rowCountLabel">0 items</span>
-      </div>
-    </section>
+    </div>
 
   </main>
 
-  <!-- Google Sheets Integration Modal -->
-  <div id="sheetsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl max-w-md w-full flex flex-col overflow-hidden shadow-2xl">
-      <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-        <div class="flex items-center space-x-2 text-emerald-700 font-semibold text-sm">
-          <i data-lucide="sheet" class="w-5 h-5"></i>
-          <span>Google Sheets Sync Settings</span>
-        </div>
-        <button id="closeSheetsModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
-          <i data-lucide="x" class="w-5 h-5"></i>
+  <!-- MODAL 1: Gemini API Key Modal -->
+  <div id="geminiModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3">
+        <h3 class="font-bold text-slate-800 text-base flex items-center space-x-2">
+          <i class="fa-solid fa-key text-blue-600"></i>
+          <span>Gemini AI Settings</span>
+        </h3>
+        <button onclick="closeModal('geminiModal')" class="text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
-
-      <div class="p-5 space-y-4 text-sm text-slate-600">
-        <p>Enter your Google Apps Script Web App URL below to automatically append scanned receipts directly to your Google Sheet.</p>
-        <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Web App Webhook URL:</label>
-          <input type="url" id="webhookUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-        </div>
+      <p class="text-xs text-slate-600 leading-relaxed">
+        Enter your free <strong>Google Gemini API Key</strong> to enable auto-extraction of receipts. Get one at <a href="https://aistudio.google.com/" target="_blank" class="text-blue-600 underline font-semibold">Google AI Studio</a>.
+      </p>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Gemini API Key</label>
+        <input type="password" id="geminiKeyInput" placeholder="AIzaSy..." class="w-full px-3 py-2 border rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none" />
       </div>
-
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-2">
-        <button id="saveWebhookBtn" class="px-4 py-2 bg-emerald-600 text-white font-medium text-xs rounded-lg hover:bg-emerald-700 transition">
-          Save Settings
-        </button>
+      <div class="flex justify-between items-center pt-2">
+        <button id="btnClearGeminiKey" class="text-xs text-red-600 hover:underline">Clear Key</button>
+        <div class="flex space-x-2">
+          <button onclick="closeModal('geminiModal')" class="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-medium">Cancel</button>
+          <button id="btnSaveGeminiKey" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-700 rounded-xl text-white font-medium shadow-sm">Save Key</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Firebase Config Settings Modal -->
-  <div id="firebaseModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl max-w-md w-full flex flex-col overflow-hidden shadow-2xl">
-      <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-        <div class="flex items-center space-x-2 text-amber-700 font-semibold text-sm">
-          <i data-lucide="database" class="w-5 h-5"></i>
-          <span>Firebase Cloud Database Sync</span>
-        </div>
-        <button id="closeFirebaseModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
-          <i data-lucide="x" class="w-5 h-5"></i>
+  <!-- MODAL 2: Firebase Configuration Modal -->
+  <div id="firebaseModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3">
+        <h3 class="font-bold text-slate-800 text-base flex items-center space-x-2">
+          <i class="fa-solid fa-cloud text-amber-500"></i>
+          <span>Firebase Sync Settings</span>
+        </h3>
+        <button onclick="closeModal('firebaseModal')" class="text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
-
-      <div class="p-5 space-y-4 text-sm text-slate-600">
-        <p>To sync receipts across phone, tablet, and PC, paste your `firebaseConfig` JSON object below.</p>
-        <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Firebase Config (JSON):</label>
-          <textarea id="firebaseConfigInput" rows="6" placeholder='{
-  "apiKey": "AIzaSy...",
-  "authDomain": "my-app.firebaseapp.com",
-  "projectId": "my-app",
-  "storageBucket": "my-app.firebasestorage.app",
-  "messagingSenderId": "123456",
-  "appId": "1:123456:web:abc"
-}' class="w-full border border-slate-300 rounded-lg p-2 text-xs font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"></textarea>
-        </div>
+      <p class="text-xs text-slate-600 leading-relaxed">
+        Paste your Firebase configuration below to sync receipts live across your phone, tablet, and PC.
+      </p>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">firebaseConfig (JSON or JavaScript Object)</label>
+        <textarea id="firebaseConfigInput" rows="6" placeholder='{\n  "apiKey": "AIzaSy...",\n  "authDomain": "my-app.firebaseapp.com",\n  "projectId": "my-app",\n  "storageBucket": "my-app.appspot.com",\n  "messagingSenderId": "123...",\n  "appId": "1:123..."\n}' class="w-full px-3 py-2 border rounded-xl text-xs font-mono bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"></textarea>
       </div>
-
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-2">
-        <button id="saveFirebaseBtn" class="px-4 py-2 bg-amber-600 text-white font-medium text-xs rounded-lg hover:bg-amber-700 transition">
-          Save & Connect
-        </button>
+      <div class="flex justify-between items-center pt-2">
+        <button id="btnClearFirebaseConfig" class="text-xs text-red-600 hover:underline">Clear Sync</button>
+        <div class="flex space-x-2">
+          <button onclick="closeModal('firebaseModal')" class="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-medium">Cancel</button>
+          <button id="btnSaveFirebaseConfig" class="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-700 rounded-xl text-white font-medium shadow-sm">Save & Connect</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Gemini API Key Settings Modal -->
-  <div id="apiKeyModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl max-w-md w-full flex flex-col overflow-hidden shadow-2xl">
-      <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-        <div class="flex items-center space-x-2 text-indigo-700 font-semibold text-sm">
-          <i data-lucide="key" class="w-5 h-5"></i>
-          <span>Gemini AI Key Settings</span>
-        </div>
-        <button id="closeApiKeyModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
-          <i data-lucide="x" class="w-5 h-5"></i>
+  <!-- MODAL 3: Google Sheets Sync Modal -->
+  <div id="sheetsModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3">
+        <h3 class="font-bold text-slate-800 text-base flex items-center space-x-2">
+          <i class="fa-solid fa-table text-emerald-600"></i>
+          <span>Google Sheets Direct Webhook</span>
+        </h3>
+        <button onclick="closeModal('sheetsModal')" class="text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
-
-      <div class="p-5 space-y-4 text-sm text-slate-600">
-        <p>To extract receipts using AI vision, enter your Google Gemini API key below. It will be saved securely in your browser's local storage.</p>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Gemini API Key:</label>
-          <input type="password" id="geminiKeyInput" placeholder="AIzaSy..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-        </div>
-
-        <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs text-indigo-800">
-          <p>Don't have a key? Get a free API key at <a href="https://aistudio.google.com/" target="_blank" rel="noopener" class="underline font-semibold text-indigo-600">Google AI Studio</a>.</p>
-        </div>
+      <p class="text-xs text-slate-600 leading-relaxed">
+        Paste your Google Apps Script Web App URL below to automatically stream every new receipt row directly into your Google Sheet.
+      </p>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Web App Webhook URL</label>
+        <input type="url" id="sheetsWebhookInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3 py-2 border rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
       </div>
-
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-2">
-        <button id="saveApiKeyBtn" class="px-4 py-2 bg-indigo-600 text-white font-medium text-xs rounded-lg hover:bg-indigo-700 transition">
-          Save API Key
-        </button>
+      <div class="flex justify-between items-center pt-2">
+        <button id="btnClearSheetsWebhook" class="text-xs text-red-600 hover:underline">Disconnect</button>
+        <div class="flex space-x-2">
+          <button onclick="closeModal('sheetsModal')" class="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-medium">Cancel</button>
+          <button id="btnSaveSheetsWebhook" class="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 rounded-xl text-white font-medium shadow-sm">Save Webhook</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Clear Confirmation Modal -->
-  <div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl max-w-sm w-full p-6 text-center shadow-2xl">
-      <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mx-auto mb-3">
-        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
-      </div>
-      <h3 class="text-base font-bold text-slate-900 mb-1">Clear All Saved Receipts?</h3>
-      <p class="text-xs text-slate-500 mb-5">This action will permanently delete all stored lines.</p>
-      <div class="flex justify-center space-x-3">
-        <button id="cancelClearBtn" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-200 transition">
-          Cancel
-        </button>
-        <button id="confirmClearBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition">
-          Yes, Delete All
+  <!-- MODAL 4: Edit Receipt Modal -->
+  <div id="editModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3">
+        <h3 class="font-bold text-slate-800 text-base">Edit Receipt Details</h3>
+        <button onclick="closeModal('editModal')" class="text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
+      <form id="editForm" class="grid grid-cols-2 gap-3 text-xs">
+        <input type="hidden" id="editId" />
+        <div class="col-span-2 sm:col-span-1">
+          <label class="block font-semibold text-slate-700 mb-1">Merchant / Store</label>
+          <input type="text" id="editStore" required class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+        </div>
+        <div class="col-span-2 sm:col-span-1">
+          <label class="block font-semibold text-slate-700 mb-1">Date</label>
+          <input type="date" id="editDate" required class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+        </div>
+        <div class="col-span-2 sm:col-span-1">
+          <label class="block font-semibold text-slate-700 mb-1">Category</label>
+          <select id="editCategory" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="Groceries">Groceries</option>
+            <option value="Dining">Dining</option>
+            <option value="Office">Office</option>
+            <option value="Utilities">Utilities</option>
+            <option value="Travel">Travel</option>
+            <option value="Healthcare">Healthcare</option>
+            <option value="General">General</option>
+          </select>
+        </div>
+        <div class="col-span-2 sm:col-span-1">
+          <label class="block font-semibold text-slate-700 mb-1">Amount</label>
+          <div class="flex space-x-1">
+            <input type="text" id="editCurrency" placeholder="$" class="w-12 px-2 py-2 border rounded-xl text-center focus:outline-none" />
+            <input type="number" step="0.01" id="editAmount" required class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+        </div>
+        <div class="col-span-2">
+          <label class="block font-semibold text-slate-700 mb-1">Invoice / Receipt #</label>
+          <input type="text" id="editInvoiceNo" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+        </div>
+        <div class="col-span-2">
+          <label class="block font-semibold text-slate-700 mb-1">Items Summary / Notes</label>
+          <textarea id="editSummary" rows="2" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+        </div>
+        <div class="col-span-2 flex justify-end space-x-2 pt-2">
+          <button type="button" onclick="closeModal('editModal')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-medium">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl text-white font-medium shadow-sm">Save Changes</button>
+        </div>
+      </form>
     </div>
   </div>
 
-  <!-- Image Preview Modal -->
-  <div id="imageModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-      <div class="p-4 border-b border-slate-200 flex justify-between items-center">
-        <h3 id="modalTitle" class="font-semibold text-slate-800 text-sm">Receipt Image Preview</h3>
-        <button id="closeModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-      <div class="p-4 flex-grow overflow-auto flex justify-center bg-slate-900/5">
-        <img id="modalImg" src="" alt="Receipt Preview" class="max-h-[70vh] object-contain rounded shadow">
-      </div>
+  <!-- MODAL 5: Image Viewer Modal -->
+  <div id="imageModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden" onclick="closeModal('imageModal')">
+    <div class="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl" onclick="event.stopPropagation()">
+      <button onclick="closeModal('imageModal')" class="absolute top-3 right-3 bg-black/60 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <img id="imageModalSrc" src="" alt="Receipt Image Preview" class="max-w-full max-h-[85vh] object-contain rounded-2xl" />
     </div>
   </div>
 
-  <!-- Firebase & App Script -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
-    lucide.createIcons();
-
-    // Key management from LocalStorage
-    let apiKey = localStorage.getItem('gemini_api_key') || "";
-    let webhookUrl = localStorage.getItem('sheets_webhook_url') || "";
-    let firebaseConfigRaw = localStorage.getItem('firebase_config_json') || "";
-
-    const appId = 'receipt-parser-app';
-    let app, auth, db;
-    let currentUser = null;
-    let unsubscribeSnapshot = null;
-    let isCloudConnected = false;
-
-    // Table Column Definitions
-    const COLUMNS = {
-      vendor: { id: 'vendor', label: 'Store / Vendor', field: 'store', type: 'string', width: 'w-1/5' },
-      date: { id: 'date', label: 'Date', field: 'date', type: 'string', width: 'w-32' },
-      category: { id: 'category', label: 'Category', field: 'category', type: 'string', width: 'w-32' },
-      amount: { id: 'amount', label: 'Amount', field: 'amount', type: 'number', width: 'w-28', align: 'right' },
-      currency: { id: 'currency', label: 'Currency', field: 'currency', type: 'string', width: 'w-20', align: 'center' },
-      invoiceNo: { id: 'invoiceNo', label: 'Invoice #', field: 'invoiceNo', type: 'string', width: 'w-32' },
-      summary: { id: 'summary', label: 'Summary / Items', field: 'itemsSummary', type: 'string', width: 'w-1/4' }
-    };
-
-    let columnOrder = JSON.parse(localStorage.getItem('receipt_column_order')) || ['vendor', 'date', 'category', 'amount', 'currency', 'invoiceNo', 'summary'];
-    let sortState = { column: null, direction: 'asc' };
-    let draggedColId = null;
-
+  <script>
+    /* JavaScript Application State */
     let items = [];
     let processingQueue = [];
     let isProcessing = false;
+    let db = null;
+    let isCloudSyncActive = false;
 
-    // Load initial local backup
-    try {
-      const stored = localStorage.getItem('receipt_items_fallback');
-      if (stored) items = JSON.parse(stored);
-    } catch(e) {}
+    // Local Storage Keys
+    const KEY_GEMINI = 'gemini_api_key';
+    const KEY_FIREBASE = 'firebase_config';
+    const KEY_SHEETS = 'sheets_webhook_url';
+    const KEY_ITEMS = 'receipt_items_local';
 
-    function setLocalFallbackMode() {
-      const cloudStatusBadge = document.getElementById('cloudStatusBadge');
-      if (!cloudStatusBadge) return;
-      cloudStatusBadge.innerHTML = `<i data-lucide="hard-drive" class="w-3 h-3"></i> Local Mode`;
-      cloudStatusBadge.className = "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600";
-      lucide.createIcons();
+    /* Helper: Toast Notifications */
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const bgColors = {
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-red-600 text-white',
+        warning: 'bg-amber-500 text-white',
+        info: 'bg-slate-800 text-white'
+      };
+
+      toast.className = `${bgColors[type] || bgColors.info} px-4 py-3 rounded-xl shadow-lg text-xs font-medium flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto`;
+      toast.innerHTML = `
+        <i class="fa-solid ${type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-info'}"></i>
+        <span>${message}</span>
+      `;
+
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
     }
 
-    function saveLocalBackup() {
+    /* Resilient Firebase Config Parser */
+    function parseFirebaseConfig(rawInput) {
+      if (!rawInput || !rawInput.trim()) return null;
       try {
-        localStorage.setItem('receipt_items_fallback', JSON.stringify(items));
-      } catch(e) {
-        console.error("Local save error:", e);
-      }
-    }
-
-    function parseFirebaseConfig(raw) {
-      if (!raw || typeof raw !== 'string') return null;
-      let str = raw.trim();
-      if (!str) return null;
-
-      // Try standard JSON parse first
-      try {
+        let str = rawInput.trim();
+        // Remove 'const firebaseConfig =' if present
+        str = str.replace(/^(var|let|const)\s+\w+\s*=\s*/i, '').replace(/;\s*$/, '');
+        // Convert JS object keys to JSON quoted keys
+        str = str.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+        // Replace single quotes with double quotes
+        str = str.replace(/'/g, '"');
+        // Remove trailing commas
+        str = str.replace(/,\s*([}\]])/g, '$1');
         return JSON.parse(str);
       } catch (e) {
-        // If strict JSON parsing fails, sanitize JavaScript object notation
-      }
-
-      // Extract object body if user pasted JS snippet (e.g. const firebaseConfig = { ... };)
-      const braceMatch = str.match(/\{[\s\S]*\}/);
-      if (braceMatch) {
-        str = braceMatch[0];
-      }
-
-      try {
-        // Convert JS object literal formatting into valid JSON
-        const jsonable = str
-          .replace(/'/g, '"') // Convert single quotes to double quotes
-          .replace(/([{,]\s*)([a-zA-Z0-9_$]+)\s*:/g, '$1"$2":') // Quote unquoted property keys
-          .replace(/,\s*([}\]])/g, '$1'); // Strip trailing commas
-
-        return JSON.parse(jsonable);
-      } catch (err) {
-        console.error("Firebase config parse error:", err);
+        console.error("Firebase config parsing error:", e);
         return null;
       }
     }
 
-    async function initFirebase() {
-      if (!firebaseConfigRaw) {
-        setLocalFallbackMode();
+    /* Initialize Firebase or Fallback to Local Storage */
+    function initFirebase() {
+      const rawConfig = localStorage.getItem(KEY_FIREBASE);
+      const config = parseFirebaseConfig(rawConfig);
+
+      if (!config || !config.apiKey || config.apiKey === 'YOUR_FIREBASE_API_KEY') {
+        setStorageBadge('Local Storage', 'slate');
+        loadLocalItems();
         return;
       }
 
+      setStorageBadge('Connecting...', 'amber');
+
       try {
-        const firebaseConfig = parseFirebaseConfig(firebaseConfigRaw);
-        if (!firebaseConfig || !firebaseConfig.apiKey) {
-          throw new Error("Invalid or unparseable Firebase config.");
+        if (!firebase.apps.length) {
+          firebase.initializeApp(config);
         }
+        db = firebase.firestore();
 
-        app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
+        // Enable offline persistence if possible
+        db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
-        await signInAnonymously(auth);
-
-        onAuthStateChanged(auth, (user) => {
-          if (user) {
-            currentUser = user;
-            isCloudConnected = true;
-            const cloudStatusBadge = document.getElementById('cloudStatusBadge');
-            cloudStatusBadge.innerHTML = `<i data-lucide="cloud" class="w-3 h-3"></i> Cloud Saved`;
-            cloudStatusBadge.className = "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700";
-            lucide.createIcons();
-
-            const collectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'receipts');
-            
-            if (unsubscribeSnapshot) unsubscribeSnapshot();
-
-            unsubscribeSnapshot = onSnapshot(collectionRef, (snapshot) => {
-              const cloudItems = [];
-              snapshot.forEach((docSnap) => {
-                cloudItems.push({ id: docSnap.id, ...docSnap.data() });
-              });
-              
-              const seenIds = new Set(cloudItems.map(i => i.id));
-              const merged = [...cloudItems];
-
-              for (const localItem of items) {
-                if (!seenIds.has(localItem.id)) {
-                  merged.push(localItem);
-                }
-              }
-
-              items = merged;
-              saveLocalBackup();
-              renderTable();
-              updateUI();
-            });
-          }
-        });
-      } catch (err) {
-        console.warn("Firebase config invalid or error connecting:", err);
-        isCloudConnected = false;
-        setLocalFallbackMode();
-      }
-    }
-
-    initFirebase();
-
-    async function saveToCloud(item) {
-      saveLocalBackup();
-      if (!isCloudConnected || !auth?.currentUser) return;
-      try {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'receipts', item.id);
-        const cleanData = {
-          store: item.store || '',
-          date: item.date || '',
-          category: item.category || '',
-          amount: parseFloat(item.amount) || 0,
-          currency: item.currency || '$',
-          invoiceNo: item.invoiceNo || '',
-          itemsSummary: item.itemsSummary || '',
-          imageDataUrl: item.imageDataUrl || null,
-          updatedAt: Date.now()
-        };
-        await setDoc(docRef, cleanData, { merge: true });
-        
-        if (webhookUrl) syncToGoogleSheets(cleanData);
-      } catch (e) {
-        console.error("Error saving doc to cloud:", e);
-      }
-    }
-
-    async function deleteFromCloud(id) {
-      items = items.filter(item => item.id !== id);
-      saveLocalBackup();
-      renderTable();
-      updateUI();
-
-      if (!isCloudConnected || !auth?.currentUser) return;
-      try {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'receipts', id);
-        await deleteDoc(docRef);
-      } catch (e) {
-        console.error("Error deleting doc from cloud:", e);
-      }
-    }
-
-    async function clearAllCloudData() {
-      items = [];
-      saveLocalBackup();
-      renderTable();
-      updateUI();
-
-      if (!isCloudConnected || !auth?.currentUser) return;
-      try {
-        const collectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'receipts');
-        const snapshot = await getDocs(collectionRef);
-        const batch = writeBatch(db);
-        snapshot.forEach((docSnap) => {
-          batch.delete(docSnap.ref);
-        });
-        await batch.commit();
-      } catch (e) {
-        console.error("Error clearing cloud data:", e);
-      }
-    }
-
-    async function syncToGoogleSheets(data) {
-      if (!webhookUrl) return;
-      try {
-        await fetch(webhookUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-      } catch (err) {
-        console.error("Webhook sync error:", err);
-      }
-    }
-
-    function compressImage(file, maxWidth = 1000, maxHeight = 1000, quality = 0.75) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-          const img = new Image();
-          img.src = event.target.result;
-          img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-
-            if (width > maxWidth || height > maxHeight) {
-              if (width / height > maxWidth / maxHeight) {
-                height = Math.round((height * maxWidth) / width);
-                width = maxWidth;
-              } else {
-                width = Math.round((width * maxHeight) / height);
-                height = maxHeight;
-              }
-            }
-
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', quality));
-          };
-          img.onerror = (err) => reject(err);
-        };
-        reader.onerror = (err) => reject(err);
-      });
-    }
-
-    ['dragenter', 'dragover'].forEach(eventName => {
-      dropZone.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        dropZone.classList.add('drag-over');
-      });
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-      dropZone.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('drag-over');
-      });
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-      if (files.length > 0) handleFiles(files);
-    });
-
-    fileInput.addEventListener('change', (e) => {
-      const files = Array.from(e.target.files);
-      if (files.length > 0) handleFiles(files);
-      fileInput.value = '';
-    });
-
-    async function handleFiles(files) {
-      for (const file of files) {
-        try {
-          const compressedBase64 = await compressImage(file);
-          processingQueue.push({
-            id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-            file: file,
-            base64: compressedBase64
+        // Authenticate anonymously
+        firebase.auth().signInAnonymously()
+          .then(() => {
+            isCloudSyncActive = true;
+            setStorageBadge('Cloud Sync Active', 'emerald');
+            listenToCloudChanges();
+          })
+          .catch((err) => {
+            console.warn("Firebase Auth Error (falling back to Local Storage):", err);
+            setStorageBadge('Local Storage', 'slate');
+            loadLocalItems();
           });
-          processNextInQueue();
-        } catch (e) {
-          console.error("Compression failed:", e);
-          showToast(`Error processing image ${file.name}`, 'error');
-        }
+
+      } catch (err) {
+        console.warn("Firebase Init Error:", err);
+        setStorageBadge('Local Storage', 'slate');
+        loadLocalItems();
       }
     }
 
+    function setStorageBadge(text, color) {
+      const badge = document.getElementById('storageBadge');
+      const colors = {
+        emerald: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        amber: 'bg-amber-100 text-amber-800 border-amber-200',
+        slate: 'bg-slate-100 text-slate-700 border-slate-200'
+      };
+      badge.className = `inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${colors[color] || colors.slate}`;
+      badge.innerHTML = `
+        <span class="w-1.5 h-1.5 rounded-full ${color === 'emerald' ? 'bg-emerald-500' : color === 'amber' ? 'bg-amber-500 animate-pulse' : 'bg-slate-400'} mr-1.5"></span>
+        ${text}
+      `;
+    }
+
+    /* Gemini 2.0 Flash Vision API Call */
     async function callGeminiVisionApi(base64DataUrl) {
-      const activeApiKey = apiKey || localStorage.getItem('gemini_api_key');
+      const activeApiKey = localStorage.getItem(KEY_GEMINI);
       if (!activeApiKey) {
-        apiKeyModal.classList.remove('hidden');
-        throw new Error("Missing Gemini API key. Please enter your API key in the Gemini Key settings.");
+        openModal('geminiModal');
+        throw new Error("Missing Gemini API Key. Click 'Gemini Key' in top header to set it.");
       }
 
       const match = base64DataUrl.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-      if (!match) throw new Error("Invalid base64 image data");
+      if (!match) throw new Error("Invalid base64 image data format");
 
       const mimeType = match[1];
       const base64Data = match[2];
 
       const prompt = `Analyze this image of a receipt, bill, or invoice. 
-Extract key fields and return ONLY a valid JSON object:
+Extract key fields and return ONLY a valid JSON object matching this schema:
 {
   "store": "Name of merchant or vendor",
   "date": "Date of transaction in YYYY-MM-DD format",
-  "category": "Expense category (e.g. Groceries, Dining, Office, Utilities, Travel, Healthcare)",
+  "category": "One of: Groceries, Dining, Office, Utilities, Travel, Healthcare, General",
   "amount": 0.00,
-  "currency": "Currency symbol like $, €, £, or code",
-  "invoiceNo": "Invoice or receipt number if present, else empty string",
+  "currency": "Currency symbol like $, €, £",
+  "invoiceNo": "Invoice or receipt reference string if present, else empty",
   "itemsSummary": "Brief summary of purchased items"
 }`;
 
@@ -647,621 +540,522 @@ Extract key fields and return ONLY a valid JSON object:
         generationConfig: { responseMimeType: "application/json" }
       };
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeApiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeApiKey}`;
 
-      let backoff = 1000;
-      for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const errMsg = errJson.error?.message || `HTTP ${res.status}`;
+        throw new Error(errMsg);
+      }
+
+      const data = await res.json();
+      let responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!responseText) throw new Error("Empty response returned from Gemini AI");
+
+      // Clean markdown fences (e.g. ```json ... ```)
+      responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+      return JSON.parse(responseText);
+    }
+
+    /* Cloud Firestore Sync Listener */
+    function listenToCloudChanges() {
+      if (!db || !isCloudSyncActive) return;
+
+      db.collection('receipts').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+        items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderTable();
+        updateMetrics();
+      }, (err) => {
+        console.warn("Firestore error, switching to local mode:", err);
+        isCloudSyncActive = false;
+        setStorageBadge('Local Storage', 'slate');
+        loadLocalItems();
+      });
+    }
+
+    /* Save Receipt (Cloud or Local) */
+    async function saveReceiptItem(item) {
+      // Auto-trigger Google Sheets webhook if connected
+      pushToSheetsWebhook(item);
+
+      if (isCloudSyncActive && db) {
         try {
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
-          if (!res.ok) throw new Error(`HTTP Error status: ${res.status}`);
-
-          const data = await res.json();
-          const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          
-          if (!responseText) throw new Error("No response text from model");
-
-          return JSON.parse(responseText);
+          const docRef = item.id ? db.collection('receipts').doc(item.id) : db.collection('receipts').doc();
+          item.id = docRef.id;
+          item.createdAt = item.createdAt || new Date().toISOString();
+          await docRef.set(item, { merge: true });
+          return;
         } catch (e) {
-          if (attempt === 4) throw e;
-          await new Promise(r => setTimeout(r, backoff));
-          backoff *= 2;
+          console.warn("Failed saving to cloud, saving locally:", e);
         }
+      }
+
+      // Local Fallback
+      if (!item.id) item.id = 'loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      const idx = items.findIndex(i => i.id === item.id);
+      if (idx >= 0) items[idx] = item;
+      else items.unshift(item);
+
+      saveLocalItems();
+      renderTable();
+      updateMetrics();
+    }
+
+    /* Delete Receipt */
+    async function deleteReceiptItem(id) {
+      if (isCloudSyncActive && db) {
+        try {
+          await db.collection('receipts').doc(id).delete();
+        } catch (e) {
+          console.warn("Error deleting cloud doc:", e);
+        }
+      }
+      items = items.filter(i => i.id !== id);
+      saveLocalItems();
+      renderTable();
+      updateMetrics();
+      showToast('Receipt deleted', 'info');
+    }
+
+    function saveLocalItems() {
+      try {
+        localStorage.setItem(KEY_ITEMS, JSON.stringify(items));
+      } catch (e) {
+        console.warn("LocalStorage full or disabled:", e);
       }
     }
 
-    window.normalizeDateIso = function(dateStr) {
-      if (!dateStr) return new Date().toISOString().split('T')[0];
-      const str = String(dateStr).trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-
-      if (str.includes('/') || str.includes('-')) {
-        const delimiter = str.includes('/') ? '/' : '-';
-        const parts = str.split(delimiter);
-        if (parts.length === 3) {
-          if (parts[0].length === 4) {
-            return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-          }
-          let p1 = parseInt(parts[0], 10);
-          let p2 = parseInt(parts[1], 10);
-          let year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-          
-          if (p1 > 12 && p2 <= 12) {
-            return `${year}-${String(p2).padStart(2, '0')}-${String(p1).padStart(2, '0')}`;
-          } else {
-            return `${year}-${String(p1).padStart(2, '0')}-${String(p2).padStart(2, '0')}`;
-          }
-        }
+    function loadLocalItems() {
+      try {
+        const raw = localStorage.getItem(KEY_ITEMS);
+        items = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        items = [];
       }
-      return str;
-    };
+      renderTable();
+      updateMetrics();
+    }
 
+    /* Google Sheets Direct Webhook Integration */
+    async function pushToSheetsWebhook(item) {
+      const webhookUrl = localStorage.getItem(KEY_SHEETS);
+      if (!webhookUrl) return;
+
+      try {
+        await fetch(webhookUrl, {
+          method: 'POST',
+          mode: 'no-cors', // Standard for Google Apps Script Web Apps
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        });
+        showToast(`Synced "${item.store}" to Google Sheets`, 'success');
+      } catch (e) {
+        console.error("Sheets Webhook Sync Error:", e);
+      }
+    }
+
+    /* Queue Processing Logic */
     async function processNextInQueue() {
       if (isProcessing || processingQueue.length === 0) return;
 
       isProcessing = true;
-      updateUI();
+      const banner = document.getElementById('processingBanner');
+      const msg = document.getElementById('processingMsg');
+      const progress = document.getElementById('progressBar');
+      const queueStatus = document.getElementById('queueStatus');
 
-      const currentItem = processingQueue[0];
-      processingBanner.classList.remove('hidden');
-      processingMsg.textContent = `Analyzing "${currentItem.file.name}" with Gemini AI...`;
-      progressBar.style.width = '30%';
+      banner.classList.remove('hidden');
+      const current = processingQueue[0];
+
+      msg.textContent = `Analyzing "${current.file.name}" with Gemini AI...`;
+      queueStatus.textContent = `${processingQueue.length} in queue`;
+      progress.style.width = '35%';
 
       try {
-        const extractedData = await callGeminiVisionApi(currentItem.base64);
-        progressBar.style.width = '80%';
+        const extracted = await callGeminiVisionApi(current.base64);
+        progress.style.width = '85%';
 
         const newItem = {
-          id: currentItem.id,
-          store: extractedData.store || 'Unknown Store',
-          date: window.normalizeDateIso(extractedData.date),
-          category: extractedData.category || 'General',
-          amount: parseFloat(extractedData.amount) || 0,
-          currency: extractedData.currency || '$',
-          invoiceNo: extractedData.invoiceNo || '',
-          itemsSummary: extractedData.itemsSummary || '',
-          imageDataUrl: currentItem.base64
+          store: extracted.store || 'Unknown Store',
+          date: extracted.date || new Date().toISOString().split('T')[0],
+          category: extracted.category || 'General',
+          amount: parseFloat(extracted.amount) || 0.00,
+          currency: extracted.currency || '$',
+          invoiceNo: extracted.invoiceNo || '',
+          itemsSummary: extracted.itemsSummary || '',
+          imageDataUrl: current.base64
         };
 
-        items.push(newItem);
-        await saveToCloud(newItem);
-        showToast(`Extracted "${newItem.store}" successfully`, 'success');
+        await saveReceiptItem(newItem);
+        showToast(`Extracted "${newItem.store}" successfully!`, 'success');
+
       } catch (err) {
-        console.error("Extraction error:", err);
-        showToast(`Failed to parse "${currentItem.file.name}". Added manual row.`, 'error');
-        
-        const fallbackItem = {
-          id: currentItem.id,
-          store: 'Manual Entry',
-          date: window.normalizeDateIso(''),
-          category: 'Uncategorized',
-          amount: 0,
+        console.error("Extraction failed:", err);
+        showToast(`Failed parsing: ${err.message}`, 'error');
+
+        // Create manual entry fallback row
+        const fallback = {
+          store: current.file.name.replace(/\.[^/.]+$/, ""),
+          date: new Date().toISOString().split('T')[0],
+          category: 'General',
+          amount: 0.00,
           currency: '$',
           invoiceNo: '',
-          itemsSummary: 'Failed auto-parse',
-          imageDataUrl: currentItem.base64
+          itemsSummary: `Parse error: ${err.message}`,
+          imageDataUrl: current.base64
         };
-        items.push(fallbackItem);
-        await saveToCloud(fallbackItem);
+        await saveReceiptItem(fallback);
       } finally {
-        progressBar.style.width = '100%';
+        progress.style.width = '100%';
         processingQueue.shift();
+
         setTimeout(() => {
           isProcessing = false;
           if (processingQueue.length === 0) {
-            processingBanner.classList.add('hidden');
-            progressBar.style.width = '0%';
+            banner.classList.add('hidden');
+            progress.style.width = '0%';
+          } else {
+            processNextInQueue();
           }
-          renderTable();
-          updateUI();
-          processNextInQueue();
         }, 300);
       }
     }
 
-    function renderTableHeader() {
-      const receiptTableHeader = document.getElementById('receiptTableHeader');
-      if (!receiptTableHeader) return;
-
-      let html = `<tr><th class="py-3 px-4 w-12 text-center">#</th>`;
-
-      columnOrder.forEach(colId => {
-        const col = COLUMNS[colId];
-        if (!col) return;
-
-        const isSorted = sortState.column === colId;
-        const sortIcon = isSorted 
-          ? (sortState.direction === 'asc' ? '<i data-lucide="arrow-up" class="w-3.5 h-3.5 text-indigo-600"></i>' : '<i data-lucide="arrow-down" class="w-3.5 h-3.5 text-indigo-600"></i>')
-          : '<i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>';
-
-        const alignClass = col.align === 'right' ? 'text-right' : (col.align === 'center' ? 'text-center' : 'text-left');
-
-        html += `
-          <th draggable="true"
-              data-col-id="${colId}"
-              onclick="toggleSort('${colId}')"
-              ondragstart="handleDragStart(event, '${colId}')"
-              ondragover="handleDragOver(event)"
-              ondragenter="handleDragEnter(event)"
-              ondragleave="handleDragLeave(event)"
-              ondrop="handleDrop(event, '${colId}')"
-              ondragend="handleDragEnd(event)"
-              class="py-3 px-3 ${col.width || ''} ${alignClass} cursor-pointer hover:bg-slate-100 transition-colors group relative border-r border-transparent hover:border-slate-200">
-            <div class="flex items-center gap-1.5 ${col.align === 'right' ? 'justify-end' : (col.align === 'center' ? 'justify-center' : 'justify-start')}">
-              <i data-lucide="grip-vertical" class="w-3.5 h-3.5 text-slate-400 cursor-grab active:cursor-grabbing hover:text-slate-600"></i>
-              <span>${col.label}</span>
-              ${sortIcon}
-            </div>
-          </th>
-        `;
-      });
-
-      html += `<th class="py-3 px-4 w-24 text-center">Actions</th></tr>`;
-      receiptTableHeader.innerHTML = html;
-      lucide.createIcons();
-    }
-
-    window.toggleSort = function(colId) {
-      if (sortState.column === colId) {
-        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-      } else {
-        sortState.column = colId;
-        sortState.direction = 'asc';
-      }
-      renderTable();
-    };
-
-    window.handleDragStart = function(e, colId) {
-      draggedColId = colId;
-      e.dataTransfer.effectAllowed = 'move';
-      e.currentTarget.classList.add('opacity-40');
-    };
-
-    window.handleDragOver = function(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    };
-
-    window.handleDragEnter = function(e) {
-      e.preventDefault();
-      e.currentTarget.classList.add('bg-indigo-50', 'border-indigo-300');
-    };
-
-    window.handleDragLeave = function(e) {
-      e.currentTarget.classList.remove('bg-indigo-50', 'border-indigo-300');
-    };
-
-    window.handleDrop = function(e, targetColId) {
-      e.preventDefault();
-      e.currentTarget.classList.remove('bg-indigo-50', 'border-indigo-300');
-      
-      if (!draggedColId || draggedColId === targetColId) return;
-
-      const fromIndex = columnOrder.indexOf(draggedColId);
-      const toIndex = columnOrder.indexOf(targetColId);
-
-      if (fromIndex !== -1 && toIndex !== -1) {
-        columnOrder.splice(fromIndex, 1);
-        columnOrder.splice(toIndex, 0, draggedColId);
-        localStorage.setItem('receipt_column_order', JSON.stringify(columnOrder));
-        renderTable();
-        showToast('Column layout updated', 'info');
-      }
-    };
-
-    window.handleDragEnd = function(e) {
-      e.currentTarget.classList.remove('opacity-40');
-      draggedColId = null;
-    };
-
+    /* Render Receipts Table & Mobile Cards */
     function renderTable() {
-      renderTableHeader();
-
-      const searchInput = document.getElementById('searchInput');
-      const tableBody = document.getElementById('receiptTableBody');
+      const tbody = document.getElementById('receiptsTableBody');
+      const cardsMobile = document.getElementById('receiptsCardsMobile');
       const emptyState = document.getElementById('emptyState');
 
-      const searchTerm = (searchInput?.value || '').toLowerCase().trim();
-      
-      let filteredItems = items.filter(item => {
-        return (
-          (item.store || '').toLowerCase().includes(searchTerm) ||
-          (item.category || '').toLowerCase().includes(searchTerm) ||
-          (item.date || '').includes(searchTerm) ||
-          (item.invoiceNo || '').toLowerCase().includes(searchTerm) ||
-          (item.itemsSummary || '').toLowerCase().includes(searchTerm)
-        );
+      const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+      const catFilter = document.getElementById('categoryFilter').value;
+
+      const filtered = items.filter(i => {
+        const matchesSearch = (i.store || '').toLowerCase().includes(searchQuery) ||
+                              (i.itemsSummary || '').toLowerCase().includes(searchQuery) ||
+                              (i.invoiceNo || '').toLowerCase().includes(searchQuery);
+        const matchesCat = catFilter === 'ALL' || i.category === catFilter;
+        return matchesSearch && matchesCat;
       });
 
-      if (sortState.column) {
-        const colDef = COLUMNS[sortState.column];
-        if (colDef) {
-          const field = colDef.field;
-          const isAsc = sortState.direction === 'asc';
-
-          filteredItems.sort((a, b) => {
-            let valA = a[field] ?? '';
-            let valB = b[field] ?? '';
-
-            if (colDef.type === 'number') {
-              valA = parseFloat(valA) || 0;
-              valB = parseFloat(valB) || 0;
-            } else {
-              valA = String(valA).toLowerCase();
-              valB = String(valB).toLowerCase();
-            }
-
-            if (valA < valB) return isAsc ? -1 : 1;
-            if (valA > valB) return isAsc ? 1 : -1;
-            return 0;
-          });
-        }
-      }
-
-      if (filteredItems.length === 0) {
-        tableBody.innerHTML = '';
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        cardsMobile.innerHTML = '';
         emptyState.classList.remove('hidden');
-      } else {
-        emptyState.classList.add('hidden');
-        
-        tableBody.innerHTML = filteredItems.map((item, idx) => {
-          let rowCells = columnOrder.map(colId => {
-            switch(colId) {
-              case 'vendor':
-                return `
-                  <td class="py-2 px-3">
-                    <input type="text" value="${escapeHtml(item.store)}" 
-                      onchange="updateItemField('${item.id}', 'store', this.value)"
-                      class="w-full bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-sm font-medium text-slate-800 transition focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                  </td>`;
-              case 'date':
-                return `
-                  <td class="py-2 px-3">
-                    <input type="date" value="${escapeHtml(window.normalizeDateIso(item.date))}" 
-                      onchange="updateItemField('${item.id}', 'date', window.normalizeDateIso(this.value))"
-                      class="w-full bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-xs text-slate-700 transition focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                  </td>`;
-              case 'category':
-                return `
-                  <td class="py-2 px-3">
-                    <input type="text" value="${escapeHtml(item.category)}" 
-                      onchange="updateItemField('${item.id}', 'category', this.value)"
-                      class="w-full bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-xs text-slate-700 transition focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                  </td>`;
-              case 'amount':
-                return `
-                  <td class="py-2 px-3 text-right">
-                    <input type="number" step="0.01" value="${item.amount}" 
-                      onchange="updateItemField('${item.id}', 'amount', parseFloat(this.value) || 0)"
-                      class="w-full text-right font-mono font-semibold bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-sm text-emerald-600 transition focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                  </td>`;
-              case 'currency':
-                return `
-                  <td class="py-2 px-3 text-center">
-                    <input type="text" value="${escapeHtml(item.currency)}" 
-                      onchange="updateItemField('${item.id}', 'currency', this.value)"
-                      class="w-full text-center bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-500 rounded px-1 py-1 text-xs text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                  </td>`;
-              case 'invoiceNo':
-                return `
-                  <td class="py-2 px-3">
-                    <input type="text" value="${escapeHtml(item.invoiceNo)}" 
-                      onchange="updateItemField('${item.id}', 'invoiceNo', this.value)"
-                      class="w-full bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-xs font-mono text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                  </td>`;
-              case 'summary':
-                return `
-                  <td class="py-2 px-3">
-                    <input type="text" value="${escapeHtml(item.itemsSummary)}" 
-                      onchange="updateItemField('${item.id}', 'itemsSummary', this.value)"
-                      class="w-full bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-500 rounded px-2 py-1 text-xs text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                  </td>`;
-              default:
-                return `<td></td>`;
-            }
-          }).join('');
+        return;
+      }
 
-          return `
-            <tr class="hover:bg-slate-50/80 transition-colors group" data-id="${item.id}">
-              <td class="py-3 px-4 text-center font-mono text-xs text-slate-400">${idx + 1}</td>
-              ${rowCells}
-              <td class="py-2 px-3 text-center">
-                <div class="flex items-center justify-center space-x-1">
-                  ${item.imageDataUrl ? `
-                    <button onclick="viewImage('${item.id}')" title="View Image" class="p-1 text-slate-400 hover:text-indigo-600 rounded hover:bg-slate-100 transition">
-                      <i data-lucide="eye" class="w-4 h-4"></i>
-                    </button>
-                  ` : ''}
-                  <button onclick="copySingleRow('${item.id}')" title="Copy Line" class="p-1 text-slate-400 hover:text-emerald-600 rounded hover:bg-slate-100 transition">
-                    <i data-lucide="copy" class="w-4 h-4"></i>
-                  </button>
-                  <button onclick="deleteRow('${item.id}')" title="Delete Line" class="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-slate-100 transition">
-                    <i data-lucide="trash-2" class="w-4 h-4"></i>
-                  </button>
+      emptyState.classList.add('hidden');
+
+      // Desktop Table Rows
+      tbody.innerHTML = filtered.map(item => `
+        <tr class="hover:bg-slate-50/80 transition-colors">
+          <td class="py-3 px-4">
+            ${item.imageDataUrl ? `
+              <img src="${item.imageDataUrl}" onclick="openImageModal('${item.imageDataUrl}')" class="w-10 h-10 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-80 transition-opacity" />
+            ` : `
+              <div class="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400">
+                <i class="fa-solid fa-file-invoice"></i>
+              </div>
+            `}
+          </td>
+          <td class="py-3 px-4 font-semibold text-slate-800">${escapeHtml(item.store)}</td>
+          <td class="py-3 px-4 text-slate-600">${escapeHtml(item.date)}</td>
+          <td class="py-3 px-4">
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+              ${escapeHtml(item.category)}
+            </span>
+          </td>
+          <td class="py-3 px-4 font-bold text-slate-900">${escapeHtml(item.currency)}${(parseFloat(item.amount) || 0).toFixed(2)}</td>
+          <td class="py-3 px-4 text-slate-500 font-mono text-[11px]">${escapeHtml(item.invoiceNo || '—')}</td>
+          <td class="py-3 px-4 text-slate-600 max-w-xs truncate" title="${escapeHtml(item.itemsSummary)}">${escapeHtml(item.itemsSummary || '—')}</td>
+          <td class="py-3 px-4 text-right space-x-1">
+            <button onclick="openEditModal('${item.id}')" class="p-1.5 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-slate-100 transition-colors" title="Edit">
+              <i class="fa-solid fa-pen-to-square"></i>
+            </button>
+            <button onclick="pushToSheetsWebhook(items.find(i=>i.id==='${item.id}'))" class="p-1.5 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-slate-100 transition-colors" title="Sync to Sheets">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+            <button onclick="deleteReceiptItem('${item.id}')" class="p-1.5 text-slate-500 hover:text-red-600 rounded-lg hover:bg-slate-100 transition-colors" title="Delete">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      // Mobile Cards
+      cardsMobile.innerHTML = filtered.map(item => `
+        <div class="p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              ${item.imageDataUrl ? `
+                <img src="${item.imageDataUrl}" onclick="openImageModal('${item.imageDataUrl}')" class="w-12 h-12 object-cover rounded-xl border border-slate-200" />
+              ` : `
+                <div class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
+                  <i class="fa-solid fa-file-invoice text-lg"></i>
                 </div>
-              </td>
-            </tr>
-          `;
-        }).join('');
-      }
-
-      lucide.createIcons();
+              `}
+              <div>
+                <h4 class="font-bold text-slate-900 text-sm">${escapeHtml(item.store)}</h4>
+                <p class="text-xs text-slate-500">${escapeHtml(item.date)} • ${escapeHtml(item.category)}</p>
+              </div>
+            </div>
+            <span class="font-bold text-base text-slate-900">${escapeHtml(item.currency)}${(parseFloat(item.amount) || 0).toFixed(2)}</span>
+          </div>
+          ${item.itemsSummary ? `<p class="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">${escapeHtml(item.itemsSummary)}</p>` : ''}
+          <div class="flex justify-end space-x-3 pt-1 border-t border-slate-50 text-xs">
+            <button onclick="openEditModal('${item.id}')" class="text-blue-600 font-medium">Edit</button>
+            <button onclick="pushToSheetsWebhook(items.find(i=>i.id==='${item.id}'))" class="text-emerald-600 font-medium">Send to Sheets</button>
+            <button onclick="deleteReceiptItem('${item.id}')" class="text-red-600 font-medium">Delete</button>
+          </div>
+        </div>
+      `).join('');
     }
 
-    window.updateItemField = function(id, field, value) {
-      const item = items.find(i => i.id === id);
-      if (item) {
-        item[field] = value;
-        saveToCloud(item);
-        updateUI();
-      }
-    };
+    /* Metrics Calculation */
+    function updateMetrics() {
+      const totalSpent = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+      document.getElementById('metricTotalSpent').textContent = `$${totalSpent.toFixed(2)}`;
+      document.getElementById('metricCount').textContent = items.length;
 
-    window.deleteRow = function(id) {
-      deleteFromCloud(id);
-    };
-
-    window.viewImage = function(id) {
-      const item = items.find(i => i.id === id);
-      if (item && item.imageDataUrl) {
-        modalImg.src = item.imageDataUrl;
-        modalTitle.textContent = `Receipt Image: ${item.store} (${window.normalizeDateIso(item.date)})`;
-        imageModal.classList.remove('hidden');
-      }
-    };
-
-    window.copySingleRow = function(id) {
-      const item = items.find(i => i.id === id);
-      if (!item) return;
-
-      const formattedDate = window.normalizeDateIso(item.date);
-      const values = columnOrder.map(colId => {
-        const colDef = COLUMNS[colId];
-        if (colId === 'date') return formattedDate;
-        return item[colDef.field] ?? '';
+      // Calculate top category
+      const catCounts = {};
+      items.forEach(i => {
+        catCounts[i.category] = (catCounts[i.category] || 0) + (parseFloat(i.amount) || 0);
       });
-
-      copyToClipboard(values.join("\t"));
-      showToast('Row copied to clipboard', 'success');
-    };
-
-    copyAllBtn.addEventListener('click', () => {
-      if (items.length === 0) {
-        showToast('No data to copy', 'error');
-        return;
-      }
-      
-      const headerLabels = columnOrder.map(colId => COLUMNS[colId]?.label || '');
-      const rows = items.map(i => {
-        const dateVal = window.normalizeDateIso(i.date);
-        return columnOrder.map(colId => {
-          const colDef = COLUMNS[colId];
-          if (colId === 'date') return dateVal;
-          return i[colDef.field] ?? '';
-        }).join("\t");
-      });
-
-      const fullText = [headerLabels.join("\t"), ...rows].join("\n");
-      copyToClipboard(fullText);
-      showToast('Entire table copied! Paste directly into Google Sheets or Excel.', 'success');
-    });
-
-    exportCsvBtn.addEventListener('click', () => {
-      if (items.length === 0) {
-        showToast('No data to export', 'error');
-        return;
-      }
-
-      const headers = columnOrder.map(colId => COLUMNS[colId]?.label || '');
-      const csvRows = [
-        headers.map(escapeCsvCell).join(','),
-        ...items.map(i => {
-          const dateVal = window.normalizeDateIso(i.date);
-          return columnOrder.map(colId => {
-            const colDef = COLUMNS[colId];
-            if (colId === 'date') return escapeCsvCell(dateVal);
-            return escapeCsvCell(i[colDef.field] ?? '');
-          }).join(',');
-        })
-      ];
-
-      const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `receipts_export_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      showToast('CSV Exported successfully', 'success');
-    });
-
-    addRowBtn.addEventListener('click', () => {
-      const newItem = {
-        id: 'item_' + Date.now(),
-        store: 'New Store',
-        date: window.normalizeDateIso(''),
-        category: 'General',
-        amount: 0.00,
-        currency: '$',
-        invoiceNo: '',
-        itemsSummary: '',
-        imageDataUrl: null
-      };
-      items.push(newItem);
-      saveToCloud(newItem);
-      renderTable();
-      updateUI();
-    });
-
-    clearAllBtn.addEventListener('click', () => {
-      if (items.length === 0) {
-        showToast('No saved receipts to delete', 'info');
-        return;
-      }
-      confirmModal.classList.remove('hidden');
-    });
-
-    cancelClearBtn.addEventListener('click', () => {
-      confirmModal.classList.add('hidden');
-    });
-
-    confirmClearBtn.addEventListener('click', async () => {
-      confirmModal.classList.add('hidden');
-      await clearAllCloudData();
-    });
-
-    sheetsConfigBtn.addEventListener('click', () => {
-      webhookUrlInput.value = localStorage.getItem('sheets_webhook_url') || '';
-      sheetsModal.classList.remove('hidden');
-    });
-
-    closeSheetsModalBtn.addEventListener('click', () => {
-      sheetsModal.classList.add('hidden');
-    });
-
-    firebaseConfigBtn.addEventListener('click', () => {
-      firebaseConfigInput.value = localStorage.getItem('firebase_config_json') || '';
-      firebaseModal.classList.remove('hidden');
-    });
-
-    closeFirebaseModalBtn.addEventListener('click', () => {
-      firebaseModal.classList.add('hidden');
-    });
-
-    saveFirebaseBtn.addEventListener('click', () => {
-      const raw = firebaseConfigInput.value.trim();
-      const parsed = parseFirebaseConfig(raw);
-      if (!parsed || !parsed.apiKey) {
-        showToast('Invalid Firebase config! Please paste the configuration snippet from Firebase Console.', 'error');
-        return;
-      }
-      localStorage.setItem('firebase_config_json', JSON.stringify(parsed));
-      firebaseModal.classList.add('hidden');
-      showToast('Firebase config saved! Connecting...', 'success');
-      setTimeout(() => location.reload(), 1000);
-    });
-
-    apiKeySettingsBtn.addEventListener('click', () => {
-      geminiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
-      apiKeyModal.classList.remove('hidden');
-    });
-
-    closeApiKeyModalBtn.addEventListener('click', () => {
-      apiKeyModal.classList.add('hidden');
-    });
-
-    saveApiKeyBtn.addEventListener('click', () => {
-      const newKey = geminiKeyInput.value.trim();
-      apiKey = newKey;
-      localStorage.setItem('gemini_api_key', newKey);
-      apiKeyModal.classList.add('hidden');
-      showToast('Gemini API Key saved successfully', 'success');
-    });
-
-    saveWebhookBtn.addEventListener('click', () => {
-      webhookUrl = webhookUrlInput.value.trim();
-      localStorage.setItem('sheets_webhook_url', webhookUrl);
-      sheetsModal.classList.add('hidden');
-      showToast('Google Sheets Webhook saved', 'success');
-    });
-
-    document.getElementById('searchInput')?.addEventListener('input', () => {
-      renderTable();
-    });
-
-    closeModalBtn.addEventListener('click', () => {
-      imageModal.classList.add('hidden');
-    });
-
-    imageModal.addEventListener('click', (e) => {
-      if (e.target === imageModal) {
-        imageModal.classList.add('hidden');
-      }
-    });
-
-    function updateUI() {
-      const statCount = document.getElementById('statCount');
-      const rowCountLabel = document.getElementById('rowCountLabel');
-      const statTotal = document.getElementById('statTotal');
-      const statStatus = document.getElementById('statStatus');
-
-      if (statCount) statCount.textContent = items.length;
-      if (rowCountLabel) rowCountLabel.textContent = `${items.length} ${items.length === 1 ? 'line saved' : 'lines saved'}`;
-
-      const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-      if (statTotal) statTotal.textContent = `$${totalAmount.toFixed(2)}`;
-
-      if (statStatus) {
-        if (isProcessing) {
-          statStatus.textContent = 'Analyzing AI...';
-          statStatus.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 animate-pulse';
-        } else {
-          statStatus.textContent = isCloudConnected ? 'Cloud Auto-Synced' : 'Local Mode';
-          statStatus.className = isCloudConnected 
-            ? 'text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700'
-            : 'text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600';
+      let topCat = '—';
+      let maxCatVal = 0;
+      Object.entries(catCounts).forEach(([cat, val]) => {
+        if (val > maxCatVal) {
+          maxCatVal = val;
+          topCat = cat;
         }
-      }
-    }
+      });
+      document.getElementById('metricTopCat').textContent = topCat;
 
-    function copyToClipboard(text) {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
+      // Sheets Status Badge
+      const hasWebhook = !!localStorage.getItem(KEY_SHEETS);
+      const sheetsMetric = document.getElementById('metricSheetsStatus');
+      sheetsMetric.textContent = hasWebhook ? 'Active' : 'Not Configured';
+      sheetsMetric.className = hasWebhook ? 'text-xs font-bold text-emerald-600' : 'text-xs font-bold text-slate-400';
     }
 
     function escapeHtml(str) {
       if (!str) return '';
-      return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    function escapeCsvCell(cell) {
-      if (cell === null || cell === undefined) return '""';
-      const str = String(cell).replace(/"/g, '""');
-      return `"${str}"`;
+    /* Modal Helpers */
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function openImageModal(src) {
+      document.getElementById('imageModalSrc').src = src;
+      openModal('imageModal');
     }
 
-    function showToast(message, type = 'info') {
-      const toastContainer = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      
-      const bgColors = {
-        success: 'bg-slate-900 text-white border-emerald-500',
-        error: 'bg-red-900 text-white border-red-500',
-        info: 'bg-slate-800 text-white border-indigo-500'
-      };
+    function openEditModal(id) {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
 
-      toast.className = `pointer-events-auto flex items-center space-x-2 px-4 py-3 rounded-lg shadow-lg border-l-4 text-xs font-medium transform transition-all duration-300 translate-y-2 opacity-0 ${bgColors[type] || bgColors.info}`;
-      toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+      document.getElementById('editId').value = item.id;
+      document.getElementById('editStore').value = item.store || '';
+      document.getElementById('editDate').value = item.date || '';
+      document.getElementById('editCategory').value = item.category || 'General';
+      document.getElementById('editCurrency').value = item.currency || '$';
+      document.getElementById('editAmount').value = item.amount || 0;
+      document.getElementById('editInvoiceNo').value = item.invoiceNo || '';
+      document.getElementById('editSummary').value = item.itemsSummary || '';
 
-      toastContainer.appendChild(toast);
-
-      setTimeout(() => {
-        toast.classList.remove('translate-y-2', 'opacity-0');
-      }, 10);
-
-      setTimeout(() => {
-        toast.classList.add('opacity-0', 'translate-y-2');
-        setTimeout(() => toast.remove(), 300);
-      }, 3500);
+      openModal('editModal');
     }
 
-    renderTable();
-    updateUI();
+    /* CSV Export */
+    function exportCsv() {
+      if (items.length === 0) return showToast('No data to export', 'warning');
+
+      const headers = ['Store', 'Date', 'Category', 'Amount', 'Currency', 'InvoiceNo', 'Summary'];
+      const rows = items.map(i => [
+        `"${(i.store || '').replace(/"/g, '""')}"`,
+        `"${i.date || ''}"`,
+        `"${i.category || ''}"`,
+        i.amount || 0,
+        `"${i.currency || '$'}"`,
+        `"${(i.invoiceNo || '').replace(/"/g, '""')}"`,
+        `"${(i.itemsSummary || '').replace(/"/g, '""')}"`
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `receipts_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
+    /* File Input Handlers */
+    function handleFiles(fileList) {
+      Array.from(fileList).forEach(file => {
+        if (!file.type.startsWith('image/')) {
+          showToast(`Skipped ${file.name} (not an image)`, 'warning');
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          processingQueue.push({ file, base64: e.target.result });
+          processNextInQueue();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    /* Application Initialization */
+    window.addEventListener('DOMContentLoaded', () => {
+      // Init storage & Firebase
+      initFirebase();
+
+      // UI Element bindings
+      document.getElementById('btnOpenGeminiModal').addEventListener('click', () => {
+        document.getElementById('geminiKeyInput').value = localStorage.getItem(KEY_GEMINI) || '';
+        openModal('geminiModal');
+      });
+
+      document.getElementById('btnSaveGeminiKey').addEventListener('click', () => {
+        const val = document.getElementById('geminiKeyInput').value.trim();
+        if (val) localStorage.setItem(KEY_GEMINI, val);
+        else localStorage.removeItem(KEY_GEMINI);
+        closeModal('geminiModal');
+        showToast('Gemini API key saved', 'success');
+      });
+
+      document.getElementById('btnClearGeminiKey').addEventListener('click', () => {
+        localStorage.removeItem(KEY_GEMINI);
+        document.getElementById('geminiKeyInput').value = '';
+        closeModal('geminiModal');
+        showToast('Gemini API key cleared', 'info');
+      });
+
+      document.getElementById('btnOpenFirebaseModal').addEventListener('click', () => {
+        document.getElementById('firebaseConfigInput').value = localStorage.getItem(KEY_FIREBASE) || '';
+        openModal('firebaseModal');
+      });
+
+      document.getElementById('btnSaveFirebaseConfig').addEventListener('click', () => {
+        const raw = document.getElementById('firebaseConfigInput').value.trim();
+        const parsed = parseFirebaseConfig(raw);
+        if (raw && !parsed) {
+          return showToast('Invalid Firebase config syntax', 'error');
+        }
+        if (raw) localStorage.setItem(KEY_FIREBASE, raw);
+        else localStorage.removeItem(KEY_FIREBASE);
+        
+        closeModal('firebaseModal');
+        showToast('Firebase config updated. Reloading...', 'success');
+        setTimeout(() => location.reload(), 1000);
+      });
+
+      document.getElementById('btnClearFirebaseConfig').addEventListener('click', () => {
+        localStorage.removeItem(KEY_FIREBASE);
+        closeModal('firebaseModal');
+        showToast('Firebase sync cleared. Reloading...', 'info');
+        setTimeout(() => location.reload(), 1000);
+      });
+
+      document.getElementById('btnOpenSheetsModal').addEventListener('click', () => {
+        document.getElementById('sheetsWebhookInput').value = localStorage.getItem(KEY_SHEETS) || '';
+        openModal('sheetsModal');
+      });
+
+      document.getElementById('btnSaveSheetsWebhook').addEventListener('click', () => {
+        const url = document.getElementById('sheetsWebhookInput').value.trim();
+        if (url) localStorage.setItem(KEY_SHEETS, url);
+        else localStorage.removeItem(KEY_SHEETS);
+        closeModal('sheetsModal');
+        updateMetrics();
+        showToast('Google Sheets webhook saved', 'success');
+      });
+
+      document.getElementById('btnClearSheetsWebhook').addEventListener('click', () => {
+        localStorage.removeItem(KEY_SHEETS);
+        document.getElementById('sheetsWebhookInput').value = '';
+        closeModal('sheetsModal');
+        updateMetrics();
+        showToast('Google Sheets webhook disconnected', 'info');
+      });
+
+      document.getElementById('fileInput').addEventListener('change', (e) => handleFiles(e.target.files));
+      document.getElementById('cameraInput').addEventListener('change', (e) => handleFiles(e.target.files));
+
+      // Drag and drop handlers
+      const dropzone = document.getElementById('dropzone');
+      ['dragenter', 'dragover'].forEach(evt => {
+        dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('dropzone-active'); });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('dropzone-active'); });
+      });
+      dropzone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+
+      // Search & Filters
+      document.getElementById('searchInput').addEventListener('input', renderTable);
+      document.getElementById('categoryFilter').addEventListener('change', renderTable);
+      document.getElementById('btnExportCsv').addEventListener('click', exportCsv);
+
+      document.getElementById('btnClearAll').addEventListener('click', () => {
+        if (confirm('Are you sure you want to delete all receipt records?')) {
+          items = [];
+          saveLocalItems();
+          renderTable();
+          updateMetrics();
+          showToast('All receipts cleared', 'info');
+        }
+      });
+
+      // Add manual row
+      document.getElementById('btnAddManualRow').addEventListener('click', () => {
+        saveReceiptItem({
+          store: 'New Merchant',
+          date: new Date().toISOString().split('T')[0],
+          category: 'General',
+          amount: 0.00,
+          currency: '$',
+          invoiceNo: '',
+          itemsSummary: 'Manual entry'
+        });
+        showToast('Manual row created', 'success');
+      });
+
+      // Edit Form submission
+      document.getElementById('editForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('editId').value;
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+
+        item.store = document.getElementById('editStore').value;
+        item.date = document.getElementById('editDate').value;
+        item.category = document.getElementById('editCategory').value;
+        item.currency = document.getElementById('editCurrency').value;
+        item.amount = parseFloat(document.getElementById('editAmount').value) || 0;
+        item.invoiceNo = document.getElementById('editInvoiceNo').value;
+        item.itemsSummary = document.getElementById('editSummary').value;
+
+        await saveReceiptItem(item);
+        closeModal('editModal');
+        showToast('Receipt updated', 'success');
+      });
+    });
   </script>
 </body>
 </html>
