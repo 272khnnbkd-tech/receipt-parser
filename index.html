@@ -366,6 +366,38 @@
       }
     }
 
+    function parseFirebaseConfig(raw) {
+      if (!raw || typeof raw !== 'string') return null;
+      let str = raw.trim();
+      if (!str) return null;
+
+      // Try standard JSON parse first
+      try {
+        return JSON.parse(str);
+      } catch (e) {
+        // If strict JSON parsing fails, sanitize JavaScript object notation
+      }
+
+      // Extract object body if user pasted JS snippet (e.g. const firebaseConfig = { ... };)
+      const braceMatch = str.match(/\{[\s\S]*\}/);
+      if (braceMatch) {
+        str = braceMatch[0];
+      }
+
+      try {
+        // Convert JS object literal formatting into valid JSON
+        const jsonable = str
+          .replace(/'/g, '"') // Convert single quotes to double quotes
+          .replace(/([{,]\s*)([a-zA-Z0-9_$]+)\s*:/g, '$1"$2":') // Quote unquoted property keys
+          .replace(/,\s*([}\]])/g, '$1'); // Strip trailing commas
+
+        return JSON.parse(jsonable);
+      } catch (err) {
+        console.error("Firebase config parse error:", err);
+        return null;
+      }
+    }
+
     async function initFirebase() {
       if (!firebaseConfigRaw) {
         setLocalFallbackMode();
@@ -373,7 +405,11 @@
       }
 
       try {
-        const firebaseConfig = JSON.parse(firebaseConfigRaw);
+        const firebaseConfig = parseFirebaseConfig(firebaseConfigRaw);
+        if (!firebaseConfig || !firebaseConfig.apiKey) {
+          throw new Error("Invalid or unparseable Firebase config.");
+        }
+
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
@@ -1100,9 +1136,14 @@ Extract key fields and return ONLY a valid JSON object:
 
     saveFirebaseBtn.addEventListener('click', () => {
       const raw = firebaseConfigInput.value.trim();
-      localStorage.setItem('firebase_config_json', raw);
+      const parsed = parseFirebaseConfig(raw);
+      if (!parsed || !parsed.apiKey) {
+        showToast('Invalid Firebase config! Please paste the configuration snippet from Firebase Console.', 'error');
+        return;
+      }
+      localStorage.setItem('firebase_config_json', JSON.stringify(parsed));
       firebaseModal.classList.add('hidden');
-      showToast('Firebase config saved. Reloading...', 'success');
+      showToast('Firebase config saved! Connecting...', 'success');
       setTimeout(() => location.reload(), 1000);
     });
 
